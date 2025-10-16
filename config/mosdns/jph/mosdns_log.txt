@@ -1,4 +1,41 @@
 
+20251015
+
+1：停止mosdns并替换二进制
+2：创建文件并赋权 /cus/mosdns/sub_config/requery.yaml
+3：创建文件并赋权 /cus/mosdns/webinfo/requeryconfig.json
+4：/cus/mosdns/config_custom.yaml中，添加如下内容
+  - "/cus/mosdns/sub_config/webinfo.yaml"                 #前端信息与配置存储
+此行为添加行，上一行仅供定位位置  - "/cus/mosdns/sub_config/requery.yaml"                 #分流与缓存刷新功能
+
+下面的内容添加至文件最末尾
+#刷新服务器
+  - tag: udp_requery
+    type: udp_server
+    args:
+      entry: sequence_6666
+      listen: ":66"
+
+  - tag: tcp_requery
+    type: tcp_server
+    args:
+      entry: sequence_6666
+      listen: ":66"
+
+5：启动mosdns
+
+执行动作
+1：保存生成的分流域名列表后合并realip fakeip nov4 nov6清单去重后形成域名总表，多次执行仅向总表添加域名，除非web上清空全量备份。
+2：清空首层缓存、生成的分流域名列表
+3：用域名总表向66端口（不记录日志，不污染web日志）查询A、AAAA记录，重新生成首层缓存、分流域名列表，刷新第2层缓存
+4：保存重新生成的分流域名列表
+5：建议在web上设置为每天凌晨执行此动作。
+
+注意！注意！注意！注意！注意！  如果配置了私有doh，此功能会造成额外的额度消耗，消耗量取决于域名总表条目数。
+
+
+
+
 20250829
 
 保存客户端别名至服务端功能添加
