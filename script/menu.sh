@@ -256,6 +256,8 @@ case $choice in
             1)  # 运行中
                 if [[ -d "/cus/mosdns" ]]; then
                     # 魔改UI版
+                    echo "正在安装MosDNS魔改UI版..."
+                    echo "请注意：魔改UI版可能存在不稳定因素，请谨慎使用。"
                     cleanup_cmd=". ${DIRPATH}/init.sh mosdns /usr/local/bin/mosdns /cus/mosdns && rm -rf /cus/mosdns && rm -rf /etc/mosdns"
                     handle_running_service "Mosdns (魔改UI版)" "$cleanup_cmd" ". $DIRPATH/mosdns.sh" 
                 else
