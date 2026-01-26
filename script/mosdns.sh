@@ -218,7 +218,8 @@ configure_mosdns_rules() {
         2) config_url="https://github.com/herozmy/StoreHouse/raw/refs/heads/latest/config/mosdns/ph/mosdns20250401.zip" ;;
         999)
             dest_dir="$MOSDNS_PATH_CUSTOM"
-            config_url="https://github.com/herozmy/StoreHouse/raw/refs/heads/latest/config/mosdns/jph/mosdns.zip"
+            config_url="https://raw.githubusercontent.com/yyysuo/firetv/refs/heads/master/mosdnsconfigupdate/mosdns1225all.zip"
+            #config_url="https://github.com/herozmy/StoreHouse/raw/refs/heads/latest/config/mosdns/jph/mosdns.zip"
             ;;
         0) log_warn "操作已取消。"; return ;;
         *) log_error "无效的选择。"; exit 1 ;;
@@ -250,34 +251,76 @@ configure_mosdns_rules() {
     log_success "MosDNS 规则已成功拉取。"
     log_info "正在根据您的输入适配配置文件..."
     if [ "$choice" == "999" ]; then
-        sed -i 's|fc00::/18|f2b0::/18|g' "${dest_dir}/sub_config/cache.yaml"
-        sed -i "s|127.0.0.1:7874|${uiport}|g" "${dest_dir}/sub_config/forward_1.yaml"
-        sed -i "s/202.102.128.68/${localdns}/g" "${dest_dir}/sub_config/forward_local.yaml"
-        log_info "是否注释sock5代理,如注释,请输入y,否则输入n"
-        log_info "sock5代理：singbox/mihomo默认为:127.0.0.1:7891"
-        read -rp "请输入您的选择 [y-n], 回车默认为y: " sock5_choice
-        if [ "$sock5_choice" == "y" ]; then 
-            log_info "正在注释sock5代理..."
-            sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/forward_nocn.yaml"
-            sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/forward_nocn_ecs.yaml"
-            sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/rule_set.yaml"
-            sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/adguard.yaml"
-        else
-            log_info "sock5代理未注释,默认sock5代理：127.0.0.1:7891"
-            log_info "是否更改sock5代理,如更改,请输入y,否则输入n"
-            read -rp "请输入您的选择 [y-n], 回车默认为n: " sock5_choice
-            if [ "$sock5_choice" == "y" ]; then
-                read -rp "请输入sock5代理地址: " sock5_port
-                sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/forward_nocn.yaml"
-                sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/forward_nocn_ecs.yaml"
-                sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/rule_set.yaml"
-                sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/adguard.yaml"
-                log_info "sock5代理已更改,新sock5代理地址为:${sock5_port}"
-            fi
-        fi
-        sed -i 's|/tmp/mosdns|/cus/mosdns/mosdns|g' /cus/mosdns/config_custom.yaml
-        sed -i 's/listen: 127.0.0.1:6666/listen: ":53"/' "${dest_dir}/config_custom.yaml"
+        # 仅在 999 分支更新 upstream_overrides.json（不做存在性检测）
+        local upstream_file="${dest_dir}/upstream_overrides.json"
+        log_info "正在更新 upstream_overrides.json: $upstream_file"
+        sed -i "s/202.102.128.68/${localdns}/g" "$upstream_file"
+        sed -i "s|udp://127.0.0.1:7874|udp://${uiport}|g" "$upstream_file"
 
+        log_info "是否启用 sock5 代理? (y/n, 默认 y)"
+        read -rp "请输入您的选择 [y-n], 回车默认为y: " sock5_enable
+        sock5_enable="${sock5_enable:-y}"
+        if [ "$sock5_enable" == "y" ]; then
+            read -rp "请输入 sock5 地址 (默认 127.0.0.1:7891): " sock5_addr
+            sock5_addr="${sock5_addr:-127.0.0.1:7891}"
+            sed -i "s/127.0.0.1:7891/${sock5_addr}/g" "$upstream_file"
+        else
+            sed -i "s/127.0.0.1:7891//g" "$upstream_file"
+        fi
+
+        log_info "请输入 to-国内mihomo 地址 (默认 127.0.0.1:1053)，如果不了解咋回车默认即可"
+        read -rp "请输入to-国内 mihomo 地址 (默认 127.0.0.1:1053): " mihomo_addr
+        mihomo_addr="${mihomo_addr:-127.0.0.1:1053}"
+        sed -i "s|udp://127.0.0.1:1053|udp://${mihomo_addr}|g" "$upstream_file"
+
+        log_info "请输入 ECS 地址 (默认 2408:8214:213::1)"
+        read -rp "请输入 ECS 地址 (默认 2408:8214:213::1): " ecs_addr
+        ecs_addr="${ecs_addr:-2408:8214:213::1}"
+
+        local config_overrides_file="${dest_dir}/config_overrides.json"
+        log_info "正在写入 config_overrides.json: $config_overrides_file"
+        if [ "$sock5_enable" == "y" ]; then
+            cat > "$config_overrides_file" <<EOF
+{
+  "socks5": "${sock5_addr:-127.0.0.1:7891}",
+  "ecs": "${ecs_addr}"
+}
+EOF
+        else
+            cat > "$config_overrides_file" <<EOF
+{
+  "ecs": "${ecs_addr}"
+}
+EOF
+        fi
+        # 以下适配逻辑已禁用（按需求仅注释 999 分支）
+        # sed -i 's|fc00::/18|f2b0::/18|g' "${dest_dir}/sub_config/cache.yaml"
+        # sed -i "s|127.0.0.1:7874|${uiport}|g" "${dest_dir}/sub_config/forward_1.yaml"
+        # sed -i "s/202.102.128.68/${localdns}/g" "${dest_dir}/sub_config/forward_local.yaml"
+        # log_info "是否注释sock5代理,如注释,请输入y,否则输入n"
+        # log_info "sock5代理：singbox/mihomo默认为:127.0.0.1:7891"
+        # read -rp "请输入您的选择 [y-n], 回车默认为y: " sock5_choice
+        # if [ "$sock5_choice" == "y" ]; then 
+        #     log_info "正在注释sock5代理..."
+        #     sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/forward_nocn.yaml"
+        #     sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/forward_nocn_ecs.yaml"
+        #     sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/rule_set.yaml"
+        #     sed -i '/^[[:space:]]*socks5: "127.0.0.1:7891"[[:space:]]*$/s/^[[:space:]]*/\#&/' "${dest_dir}/sub_config/adguard.yaml"
+        # else
+        #     log_info "sock5代理未注释,默认sock5代理：127.0.0.1:7891"
+        #     log_info "是否更改sock5代理,如更改,请输入y,否则输入n"
+        #     read -rp "请输入您的选择 [y-n], 回车默认为n: " sock5_choice
+        #     if [ "$sock5_choice" == "y" ]; then
+        #         read -rp "请输入sock5代理地址: " sock5_port
+        #         sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/forward_nocn.yaml"
+        #         sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/forward_nocn_ecs.yaml"
+        #         sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/rule_set.yaml"
+        #         sed -i "s|127.0.0.1:7891|${sock5_port}|g" "${dest_dir}/sub_config/adguard.yaml"
+        #         log_info "sock5代理已更改,新sock5代理地址为:${sock5_port}"
+        #     fi
+        # fi
+        # sed -i 's|/tmp/mosdns|/cus/mosdns/mosdns|g' /cus/mosdns/config_custom.yaml
+        # sed -i 's/listen: 127.0.0.1:6666/listen: ":53"/' "${dest_dir}/config_custom.yaml"
     else
         sed -i "s/- addr: 10.10.10.147:6666/- addr: ${uiport}/g" "${dest_dir}/config.yaml"
     fi
